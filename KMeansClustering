@@ -1,0 +1,98 @@
+import pandas as pd
+import numpy as np
+
+def readFile(url):
+    data = pd.read_csv(url,parse_dates = ['Dates'])
+    return data
+
+def preProcessData(data):
+    weekdays = {'Monday':0., 'Tuesday':1., 'Wednesday':2., 'Thursday': 3., 'Friday':4.,'Saturday':5., 'Sunday':6.}
+    Year = data.Dates.dt.year #年
+    Month = data.Dates.dt.month #月
+    Day = data.Dates.dt.day #日
+    Hour = data.Dates.dt.hour #时
+    Minute = data.Dates.dt.minute #分
+    DayOfWeek = pd.DataFrame([float(weekdays[w]) for w in data.DayOfWeek]) #日期
+    X = data.X
+    Y = data.Y
+    data = pd.concat([Year,Month,Day,Hour,Minute,DayOfWeek,X,Y],axis=1)
+    data.columns = ['Year','Month','Day','Hour','Minute','DayOfWeek','X','Y']
+    data = (data - data.min()) / (data.max() - data.min())
+    return data
+
+#kmeans原始计算距离函数-----欧式距离  
+def dist_eclud(vecA, vecB):
+    vec_square = []
+    for element in vecA - vecB:
+        element = element ** 2
+        vec_square.append(element)
+    return sum(vec_square) ** 0.5
+
+#自定义计算距离函数-----曼哈顿距离
+def dist_Manhattan(vecA, vecB):
+    vec_square = []
+    for element in vecA - vecB:
+        element = abs(vecA - vecB)
+        vec_square.append(element)
+    return sum(vec_square)
+
+#随机构建k个质心
+def rand_cent(data_set, k):
+    n = data_set.shape[1]    
+    centroids = np.zeros((k, n))
+    for j in range(n):
+        min_j = float(min(data_set[:,j]))
+        range_j = float(max(data_set[:,j])) - min_j
+        centroids[:,j] = (min_j + range_j * np.random.rand(k, 1))[:,0]
+    return centroids
+
+#Kmeans算法，循环执行，知道簇分类不变，迭代停止
+def Kmeans(data_set, k):    
+    m = data_set.shape[0]   
+    cluster_assment = np.zeros((m, 2))  
+    centroids = rand_cent(data_set, k)  
+    cluster_changed = True        
+    while cluster_changed:       
+        cluster_changed = False   
+        for i in range(m):        
+            min_dist = np.inf
+            min_index = -1   
+            for j in range(k):     
+                dist_ji = dist_eclud(centroids[j,:], data_set[i,:])
+                if dist_ji < min_dist:              
+                    min_dist = dist_ji; min_index = j   
+            if cluster_assment[i,0] != min_index:    
+                cluster_changed = True      
+            cluster_assment[i,:] = min_index, min_dist**2   
+        for cent in range(k):   
+            pts_inclust = data_set[np.nonzero(list(map(lambda x:x==cent, cluster_assment[:,0])))]
+            centroids[cent,:] = np.mean(pts_inclust, axis=0)
+    return centroids, cluster_assment
+ 
+if __name__=='__main__':
+    train = readFile('train_data.csv')
+    train_data = preProcessData(train)
+    train_data['PdDistrict'] = train['PdDistrict']
+    train_data['Address'] = train['Address']
+    train_data['Category'] = train['Category']
+    df = train_data.groupby(['PdDistrict','Address'])
+    k = 0
+    for name,group in df:
+        k = k + 1
+        if(k < 10):
+            print(name)
+            print('数据量',len(group))
+            print('包含的犯罪种类个数',len(group['Category'].unique()))
+            print('包含的犯罪种类',group['Category'].unique())
+            print(group.drop(columns=['PdDistrict','Address']))
+            data = group.drop(columns=['PdDistrict','Address','Category'])
+            data = data.values
+            _, my_cluster_assment = Kmeans(data,len(group['Category'].unique()))
+            cluster = []
+            for i in range(len(my_cluster_assment)):
+                cluster.append(int(my_cluster_assment[i][0]))
+            print(cluster)
+            print('聚类后个数',len(pd.value_counts(cluster)))
+            print(pd.value_counts(cluster))
+            print("-----------------------------------------")
+
