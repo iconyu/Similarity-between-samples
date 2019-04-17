@@ -1,0 +1,95 @@
+import numpy as np
+from scipy.cluster.hierarchy import linkage, fcluster,cophenet
+from scipy.spatial.distance import pdist
+import pandas as pd
+
+#数据读取
+def readFile(url):
+    data = pd.read_csv(url,parse_dates = ['Dates'])
+    return data
+#数据预处理
+def preProcessData(data):
+    weekdays = {'Monday':0., 'Tuesday':1., 'Wednesday':2., 'Thursday': 3., 'Friday':4.,'Saturday':5., 'Sunday':6.}
+    Year = data.Dates.dt.year #年
+    Month = data.Dates.dt.month #月
+    Day = data.Dates.dt.day #日
+    Hour = data.Dates.dt.hour #时
+    Minute = data.Dates.dt.minute #分
+    DayOfWeek = pd.DataFrame([float(weekdays[w]) for w in data.DayOfWeek]) #日期
+    X = data.X
+    Y = data.Y
+    data = pd.concat([Year,Month,Day,Hour,Minute,DayOfWeek,X,Y],axis=1)
+    data.columns = ['Year','Month','Day','Hour','Minute','DayOfWeek','X','Y']
+    data = (data - data.min()) / (data.max() - data.min())  #max-min标准化
+    return data
+
+
+    
+#层次聚类算法
+def hierarchy_cluster(data, method='average', threshold=0.8):
+    Z = linkage(data, method=method) #计算样本间距离
+    c,_ = cophenet(Z, pdist(data,'cityblock'))
+    print(c) #聚类打分，对比聚类后的值和曼哈顿距离，越接近1越好
+    cluster_assignments = fcluster(Z, threshold, criterion='distance')#层次聚类
+    num_clusters = cluster_assignments.max()
+    #映射到索引
+    indices = []
+    for cluster_number in range(1, num_clusters + 1):
+        indices.append(np.where(cluster_assignments == cluster_number)[0])
+    return num_clusters, indices
+  
+if __name__ == '__main__':
+    #读取数据
+    train = readFile('train_data.csv')
+    #数据预处理
+    train_data = preProcessData(train)
+    train_data['PdDistrict'] = train['PdDistrict']
+    train_data['Address'] = train['Address']
+    train_data['Category'] = train['Category']
+    #数据分组
+    df = train_data.groupby(['PdDistrict','Address'])
+    i = 0
+    labelNum = 0 #小类中不同标签个数统计
+    clustersNum = 0 #小类个数统计
+    for name,group in df: #循环所有大类，在各个大类中进行聚类
+        i = i + 1
+        print(i)
+        print(name)
+        print('数据量',len(group))
+        print('包含的犯罪种类个数',len(group['Category'].unique()))
+        print('包含的犯罪种类',group['Category'].unique())
+        #显示集合
+        df = group.drop(columns=['PdDistrict','Address'])
+        df = train.iloc[df.index,:]
+        df = df.drop(columns=['Descript','Resolution'])
+        print(df)
+        res = df.values            
+        data = group.drop(columns=['PdDistrict','Address','Category'])
+        arr = data.values
+        if(len(arr)==1):
+            print('1 cluster')
+            labelNum = labelNum + 1
+            clustersNum = clustersNum + 1
+            continue
+        else:
+            num_clusters, indices = hierarchy_cluster(arr)
+            clustersNum = clustersNum + num_clusters
+            print("%d clusters" % num_clusters)
+            for k, ind in enumerate(indices):
+                print("cluster", k + 1, "is", ind)
+            #合并犯罪种类
+            for a in range(len(indices)):
+                rs = []
+                for b in range(0,len(indices[a])):
+                    rs.append(res[b][1])
+                    dt = df.iloc[b,:]
+                    print(dt)
+                print(set(rs))
+                labelNum = labelNum + len(set(rs))
+                print('\n')
+                print("---------------------------")
+                print('\n')
+        print('clustersNum',clustersNum)
+        print('labelNum',labelNum)
+        print("=================================")
+                
