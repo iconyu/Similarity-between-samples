@@ -1,0 +1,105 @@
+一、 特征值完全相同，且标签相同
+1.训练样本中特征值Dates\DayOfWeek\PdDistrict\Address\X\Y完全相同，标签Category也相同的行。
+训练样本731904条，在整体数据里两两相同的个数对，全部数据里有65872对数据特征值相同，标签也相同。
+ 
+二、 特征值完全相同，但标签不同
+1.训练样本中特征值Dates\DayOfWeek\PdDistrict\Address\X\Y完全相同，标签Category不同的行。
+训练样本731904条，在整体数据里两两相同的个数对，全部数据里有124424对数据的特征值相同，但标签不同。
+ 
+三、分析为什么噪声比例不大，但分类结果差
+先将噪声定义为特征相同但标签不同的数据。其中噪声占总样本的比例不大，但分类结果不好，因此我们对比了“包含噪声”和“不包含噪声”的验证集准确率。
+发现在数据集不包含噪声的情况下，分类的准确率也不高。进一步分析39类犯罪类型的特征分布。
+对比犯罪类型特征取值的分布，发现分布较为相似，并不能很好的区分两种犯罪类型，提供的数据和犯罪类型的紧密度不够高，数据质量不佳，因此分类的结果较差。
+
+四、聚类基本知识
+1.样本间相似度
+1）欧式距离d=√(〖(x1-x2)〗^2+〖(y1-y2)〗^2 )
+2）曼哈顿距离d=|x1-x2|+|y1-y2|
+3）切比雪夫距离d=max(|x1-x2|,y1-y2)
+2.聚类方法
+K-Means----自定义K-Means，修改样本间相似度距离计算公式
+#kmeans原始计算距离函数-----欧式距离  
+def dist_eclud(vecA, vecB):
+    vec_square = []
+    for element in vecA - vecB:
+        element = element ** 2
+        vec_square.append(element)
+    return sum(vec_square) ** 0.5
+
+#自定义计算距离函数-----曼哈顿距离
+def dist_Manhattan(vecA, vecB):
+    vec_square = []
+    for element in vecA - vecB:
+        element = abs(vecA - vecB)
+        vec_square.append(element)
+    return sum(vec_square)
+
+#随机构建k个质心
+def rand_cent(data_set, k):
+    n = data_set.shape[1]    
+    centroids = np.zeros((k, n))
+    for j in range(n):
+        min_j = float(min(data_set[:,j]))
+        range_j = float(max(data_set[:,j])) - min_j
+        centroids[:,j] = (min_j + range_j * np.random.rand(k, 1))[:,0]
+    return centroids
+#Kmeans算法，循环执行，知道簇分类不变，迭代停止
+def Kmeans(data_set, k):    
+    m = data_set.shape[0]   
+    cluster_assment = np.zeros((m, 2))  
+    centroids = rand_cent(data_set, k)  
+    cluster_changed = True        
+    while cluster_changed:       
+        cluster_changed = False   
+        for i in range(m):        
+            min_dist = np.inf
+            min_index = -1   
+            for j in range(k):     
+                dist_ji = dist_eclud(centroids[j,:], data_set[i,:])
+                if dist_ji < min_dist:              
+                    min_dist = dist_ji; min_index = j   
+            if cluster_assment[i,0] != min_index:    
+                cluster_changed = True      
+            cluster_assment[i,:] = min_index, min_dist**2   
+        for cent in range(k):   
+            pts_inclust = data_set[np.nonzero(list(map(lambda x:x==cent, cluster_assment[:,0])))]
+            centroids[cent,:] = np.mean(pts_inclust, axis=0)
+    return centroids, cluster_assment
+    
+层次聚类
+def hierarchy_cluster(data, method='average', threshold=0.8):
+    Z = linkage(data, method=method)
+    c,_ = cophenet(Z, pdist(data,'cityblock'))
+    print(c) #聚类打分
+    cluster_assignments = fcluster(Z, threshold, criterion='distance')
+    num_clusters = cluster_assignments.max()
+    #映射到索引
+    indices = []
+    for cluster_number in range(1, num_clusters + 1):
+        indices.append(np.where(cluster_assignments == cluster_number)[0])
+    return num_clusters, indices
+    
+1)method取值
+	Single:min(dist(s,t))
+	Complete:max(dist(s,t))
+	Average:组合中每个点到其余点距离之和的均值。计算开销大，但效果最好。
+	Weighted：类似于Average，不过加权平均值
+	Ward：方差最小化
+2)criterion取值
+	Inconsistent：threshold越接近1，表示相关性越大
+	Distance：threshold表示绝对值之差
+	Maxclust：threshold表示最大聚类个数
+  
+五、样本间相似度
+1.整体思路
+	groupby[PdDistrict,Address]
+	计算样本间相似度，相似度小于阈值的分成一类
+  
+2.具体步骤
+	1）对PdDistrict和Address进行分组，总样本数731903，分组后得到23411个大类。
+	2）查看数值型特征最大值和最小值之差，由于各个距离差不同，所以先对每一个特征进行了max-min标准化
+  Year	Month	Day	Hour	Minute	DayOfWeek	X	     Y
+  12	  11	  30	23	  59	    6	        0.14	 0.11
+	3）对每一个大类进行特征相似度聚类。特征相似度判断常用的有欧式距离、曼哈顿距离、切比雪夫距离等。将特征进行聚类的常用方法有K-Means和层次聚类。通过分析，由于每一个大类中不知道应该聚类的个数，因此K-Means算法不适用，我们选择基于层次聚类。
+	4）样本间距离计算选择的是Average（组合中每个点到其余点距离之和的均值），阈值选择0.8（距离之差绝对值的最大值）。
+	5）实验结果是18150个大类中，共包含111125个小类，320293种标签数量和，大约三分之一左右。
