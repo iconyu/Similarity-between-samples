@@ -1,0 +1,77 @@
+import pandas as pd
+from sklearn import preprocessing
+
+def readFile(url):
+    data = pd.read_csv(url,parse_dates = ['Dates'])
+    return data
+def preProcessing(data):
+    data['Year'] = data.Dates.dt.year #年
+    data['Month'] = data.Dates.dt.month #月
+    data['Day'] = data.Dates.dt.day #日
+    data['Hour'] = data.Dates.dt.hour #时
+    data['Minute'] = data.Dates.dt.minute #分
+    weekdays = {'Monday':0,'Tuesday':1,'Wednesday':2,'Thursday':3,'Friday':4,'Saturday':5,'Sunday':6}
+    data['Week'] = pd.DataFrame([int(weekdays[w]) for w in data.DayOfWeek]) #日期
+    districts = {c:i for i,c in enumerate(data['PdDistrict'].unique())}
+    data['PdDistrictNum'] = pd.DataFrame([int(districts[t]) for t in data.PdDistrict]) #街道编码
+    address = {c:i for i,c in enumerate(data['Address'].unique())}
+    data['AddressNum'] = pd.DataFrame([int(address[t]) for t in data.Address]) #街道编码
+    x = {c:i for i,c in enumerate(data['X'].unique())}
+    data['x'] = pd.DataFrame([int(x[t]) for t in data.X]) #街道编码
+    y = {c:i for i,c in enumerate(data['Y'].unique())}
+    data['y'] = pd.DataFrame([int(y[t]) for t in data.Y]) #街道编码
+    leCrime = preprocessing.LabelEncoder() 
+    data['CategoryNum'] = leCrime.fit_transform(data.Category)  #犯罪类型数值化编码
+    data = data.drop(columns = ['Dates','Category','Descript','DayOfWeek','PdDistrict','Resolution','Address','X','Y'])
+
+#统计特征相同、标签相同的个数
+def sameLabel(data):
+    for i in range(len(data)):
+        for j in range(i+1,len(data)):
+            if(data[i][10] == data[j][10] and
+               data[i][9] == data[j][9] and
+               data[i][8] == data[j][8] and
+               data[i][7] == data[j][7] and
+               data[i][6] == data[j][6] and
+               data[i][5] == data[j][5] and
+               data[i][4] == data[j][4] and
+               data[i][3] == data[j][3] and
+               data[i][2] == data[j][2] and
+               data[i][1]== data[j][1] and
+               data[i][0] == data[j][0]):
+                print(i,j)
+                f = open('same.txt','a+')
+                print(i,j,file=f)
+                f.close()     
+#统计特征相同、标签不同的个数              
+def diffLabel(data):
+    for i in range(len(data)):
+        for j in range(i+1,len(data)):
+            if(data[i][0] == data[j][0] and
+               data[i][1] == data[j][1] and
+               data[i][2] == data[j][2] and
+               data[i][3] == data[j][3] and
+               data[i][4] == data[j][4] and
+               data[i][5] == data[j][5] and
+               data[i][6] == data[j][6] and
+               data[i][7] == data[j][7] and
+               data[i][8] == data[j][8] and
+               data[i][9]== data[j][9] and
+               data[i][10] != data[j][10]):
+                print(i,j)
+                f = open('diff.txt','a+')
+                print(i,j,file=f)
+                f.close()    
+    
+if __name__ == '__main__':
+    data = readFile('train_data.csv')
+    data = preProcessing(data)
+    data = data.values
+    sameLabel(data)
+    diffLabel(data)
+
+
+
+
+
+    
